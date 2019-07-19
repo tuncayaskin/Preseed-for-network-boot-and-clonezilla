@@ -1,0 +1,896 @@
+#######STEPS BEFORE PREPARE PRESEED FILE FOR NETWORK BOOT############
+-----------Network BOOT (PXE Booting)--------------
+We need DHCP and TFTP server. Boot computer get ip address, PXEboot file address etc. from DHCP server. Mission of TFTP server is
+to store Debian image or what you boot it. First of all , we need to configure DHCP and TFTP settings. We use Virtualbox 6.0 to 
+make machine and using Ubuntu 18.04 Live Server for make DHCP and TFTP server.
+
+-------------Configuring DHCP settings------------
+We come DHCP server , and install isc-dhcp-server packet.  you can do this following code:
+
+sudo apt-get install isc-dhcp-server
+
+If install it, we should start it. We can do  this code,
+
+sudo systemctl start isc-dhcp-server
+
+Now, we open giving directory file using what you want text editor, ı am using nano
+
+sudo nano /etc/dhcp/dhcpd.conf
+
+and add this following code:
+#------------------------------------------
+allow booting;
+allow bootp;
+authoritative;
+
+subnet 10.0.2.0 netmask 255.255.255.0 {
+  range 10.0.2.50 10.0.2.99; 
+  filename "pxelinux.0";
+  option tftp-server-name "10.0.2.102";
+  option bootfile-name "pxelinux.0";
+  option routers 10.0.2.1;
+  next-server 10.0.2.102;
+}
+#------------------------------------------
+and save it.
+Explaining Code:
+allow booting: allow bootable 
+allow bootp: allow bootable
+authoritative: necessary for local
+subnet and netmask:give what is your subnet and netmask
+range: giving ip area
+filename: booting filename
+option tftp-server-name: tftp server address
+option routers: give gateway address
+next-server: give tftpserver address
+
+and we should restart DHCP server.
+
+sudo systemctl restart isc-dhcp-server
+
+DHCP server conf is done and we should look status of DHCP, and giving this information following code:
+
+sudo systemctl status isc-dhcp-server
+
+if status is okey , we can go TFTP settings.
+
+------------Configuring TFTP settings-------------
+
+We come TFTP server , and we install tftp server, you can do this following code:
+
+sudo apt-get install tftpd-hpa
+
+and we should start tftp service, this is giving following code to start:
+
+sudo systemctl start tftpd-hpa
+
+Now, we open giving directory file using what you want text editor, ı am using nano editor
+
+sudo nano /etc/default/tftpd-hpa
+
+and this following code:
+
+#------------------------------------
+TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="/var/lib/tftpboot"
+TFTP_ADDRESS=":69"
+TFTP_OPTIONS="--secure"
+#-----------------------------------
+
+Explaining Code:
+TFTP_DIRECTORY: default directory for tftp server
+TFTP_ADDRESS: communicate port
+
+and we should restart service because of confihured file.
+
+sudo systemctl restart tftpd-hpa
+
+TFTP server conf is done and we should look status of TFTP, and giving this information following code:
+
+sudo sytemctl status tftpd-hpa
+
+If status is okey , we can go download debian10 buster image to tftp server.
+
+-Download Image to Tftp server Directory and Unzip:
+We have to go default tftp directory which means /var/lib/tftpboot  before download image. 
+Then we download image writing this code:
+
+wget ftp.debian.org/debian/dists/buster/main/installer-amd64/current/images/netboot/netboot.tar.gz
+
+After that, we must untar this file.We can do it using this code:
+
+tar -zxvf netboot.tar.gz
+
+--------Preparing pxelinux.cfg file----------
+
+The PXE configuration file defines the menu displayed to the target boots up and contacts the TFTP server. We open giving directory file using what you want text editor , I am using nano editor
+
+sudo nano /var/lib/tftpboot/pxelinux.cfg/default  
+
+and add following command.
+
+#------------------------------------------------------------------
+label preseed
+  menu label ^Preseed install
+  kernel debian-installer/amd64/linux
+  append auto=true locale=tr_TR console-setup/charmap=UTF-8 console-keymaps-at/keymap=tr console-setup/layoutcode=tr console-setup/ask_detect=false pkgsel/language-pack-patterns=pkgsel/install-language-support=false interface=enp0s3 hostname=hostname01 domain="" url=tftp://10.0.2.102/buster.cfg DEBCONF_DEBUG=5 initrd=debian-installer/amd64/initrd.gz --- quiet
+#-------------------------------------------------------------------
+and save it
+Explaining Code:
+this code is giving configure before read preseed file. You can change after to use preseed file.If you want , change keyboard settings.url is important because of you take debian10 buster image from this server. Write your own tftp server ip adress instead of 10.0.2.102 and write your preseed file name and file directory instead of buster.cfg. Remember, we did default directory /var/lib/tftpboot for tftp server. For this reason, actually directory is /var/lib/tftpboot/buster.cfg  . You do not need write all directories of buster.cfg or what is yours. Enough to write preseed file name.
+
+
+-Network BOOT Test
+Firstly,Firstly we need to add Nat Network. First step, click to File , then click to Preferences. After that, click to Network. Second step click to add button (on the left square , green plus on button), then double click to coming new NatNetwork. You must unselect supports dhcp because of we have DHCP server. If you want change name what you want. Last step, click to all OK. Finally, click to settings of tftpserver machine on virtualbox, then click Network. Change attached to NAT Network instead of NAT, then choose your added name. After that click to all OK. You have to do same steps for DHCP server without add Nat Network steps. Start TFTP server and DHCP server. Make new machine ,  we need to change boot order this new mechine. First step, click to settings of new  machine on virtualbox, then click system. Second step, select tick for Network and scroll up Network to upper side. Last step, click the all OK and do giving before steps without add Nat Network steps and start it. If bootable screen come,Network BOOT Test is successfull. If is not , do again giving steps carefully. Finally, we are ready to prepare and test preseed file.
+
+
+
+--------------Preparing preseed file-------------
+
+You can make your own preseed file to use fallowing order. You have to add this file or own preseed file to 
+/var/lib/tftpboot because of we set default directory to TFTP server. If booting machine ask boot steps to you 
+when you booting your machine, you may be forget some steps in your preseed file. Check it.
+
+
+### Localization
+# Preseeding only locale sets language, country and locale.
+d-i debian-installer/locale string en_US
+
+# Keyboard selection.
+d-i keyboard-configuration/xkb-keymap select us
+
+
+### Network configuration
+# netcfg will choose an interface that has link if possible. This makes it
+# skip displaying a list if there is more than one interface.
+d-i netcfg/choose_interface select auto
+
+# To pick a particular interface instead:
+#d-i netcfg/choose_interface select eth1
+
+# If you prefer to configure the network manually, uncomment this line and
+# the static network configuration below.
+#d-i netcfg/disable_autoconfig boolean true
+
+# If you want the preconfiguration file to work on systems both with and
+# without a dhcp server, uncomment these lines and the static network
+# configuration below.
+#d-i netcfg/dhcp_failed note
+#d-i netcfg/dhcp_options select Configure network manually
+
+# Static network configuration.
+#
+# IPv4 example
+#d-i netcfg/get_ipaddress string 192.168.1.42
+#d-i netcfg/get_netmask string 255.255.255.0
+#d-i netcfg/get_gateway string 192.168.1.1
+#d-i netcfg/get_nameservers string 192.168.1.1
+#d-i netcfg/confirm_static boolean true
+#
+# IPv6 example
+#d-i netcfg/get_ipaddress string fc00::2
+#d-i netcfg/get_netmask string ffff:ffff:ffff:ffff::
+#d-i netcfg/get_gateway string fc00::1
+#d-i netcfg/get_nameservers string fc00::1
+#d-i netcfg/confirm_static boolean true
+
+# Any hostname and domain names assigned from dhcp take precedence over
+# values set here. However, setting the values still prevents the questions
+# from being shown, even if values come from dhcp.
+d-i netcfg/get_hostname string unassigned-hostname
+d-i netcfg/get_domain string unassigned-domain
+
+# If you want to force a hostname, regardless of what either the DHCP
+# server returns or what the reverse DNS entry for the IP is, uncomment
+# and adjust the following line.
+#d-i netcfg/hostname string somehost
+
+# Disable that annoying WEP key dialog.
+d-i netcfg/wireless_wep string
+
+
+### Mirror settings
+# If you select ftp, the mirror/country string does not need to be set.
+#d-i mirror/protocol string ftp
+d-i mirror/country string manual
+d-i mirror/http/hostname string ftp.tr.debian.org
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+
+
+
+### Account setup
+# Skip creation of a root account (normal user account will be able to
+# use sudo).
+d-i passwd/root-login boolean false
+# Alternatively, to skip creation of a normal user account.
+#d-i passwd/make-user boolean false
+
+# Root password, either in clear text
+#d-i passwd/root-password password r00tme
+#d-i passwd/root-password-again password r00tme
+# or encrypted using a crypt(3)  hash.
+#d-i passwd/root-password-crypted password [crypt(3) hash]
+
+# To create a normal user account.
+d-i passwd/user-fullname string test
+d-i passwd/username string test
+# Normal user's password, either in clear text
+d-i passwd/user-password string 1
+d-i passwd/user-password-again string 1
+# or encrypted using a crypt(3) hash.
+#d-i passwd/user-password-crypted password [crypt(3) hash]
+# Create the first user with the specified UID instead of the default.
+#d-i passwd/user-uid string 1010
+
+# The user account will be added to some standard initial groups. To
+# override that, use this.
+d-i passwd/user-default-groups string audio cdrom video
+
+### Clock and time zone setup
+# Controls whether or not the hardware clock is set to UTC.
+d-i clock-setup/utc boolean true
+
+# You may set this to any valid setting for $TZ; see the contents of
+# /usr/share/zoneinfo/ for valid values.
+d-i time/zone string US/Eastern
+
+# Controls whether to use NTP to set the clock during the install
+#d-i clock-setup/ntp boolean true
+# NTP server to use. The default is almost always fine here.
+#d-i clock-setup/ntp-server string 
+
+### Partitioning
+## Partitioning example
+# If the system has free space you can choose to only partition that space.
+# This is only honoured if partman-auto/method (below) is not set.
+#d-i partman-auto/init_automatically_partition select 90%
+
+
+
+# Alternatively, you may specify a disk to partition. If the system has only
+# one disk the installer will default to using that, but otherwise the device
+# name must be given in traditional, non-devfs format (so e.g. /dev/sda
+# and not e.g. /dev/discs/disc0/disc).
+# For example, to use the first SCSI/SATA hard disk:
+#d-i partman-auto/disk string /dev/sda
+# In addition, you'll need to specify the method to use.
+# The presently available methods are:
+# - regular: use the usual partition types for your architecture
+# - lvm:     use LVM to partition the disk
+# - crypto:  use LVM within an encrypted partition
+d-i partman-auto/method string lvm
+d-i partman-auto-lvm/guided_size string max
+# If one of the disks that are going to be automatically partitioned
+# contains an old LVM configuration, the user will normally receive a
+# warning. This can be preseeded away...
+d-i partman-lvm/device_remove_lvm boolean true
+# The same applies to pre-existing software RAID array:
+d-i partman-md/device_remove_md boolean true
+# And the same goes for the confirmation to write the lvm partitions.
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+
+# You can choose one of the three predefined partitioning recipes:
+# - atomic: all files in one partition
+# - home:   separate /home partition
+# - multi:  separate /home, /var, and /tmp partitions
+d-i partman-auto/choose_recipe select atomic
+
+# Or provide a recipe of your own...
+# If you have a way to get a recipe file into the d-i environment, you can
+# just point at it.
+#d-i partman-auto/expert_recipe_file string /hd-media/recipe
+
+# If not, you can put an entire recipe into the preconfiguration file in one
+# (logical) line. This example creates a small /boot partition, suitable
+# swap, and uses the rest of the space for the root partition:
+#d-i partman-auto/expert_recipe string                         \
+#      boot-root ::                                            \
+#              1024 1024 1% ext3                               \
+#                      $primary{ } $bootable{ }                \
+#                      method{ format } format{ }              \
+#                      use_filesystem{ } filesystem{ ext3 }    \
+#                      mountpoint{ /boot }                     \
+#              .                                               \
+#              5000 10000 16000000 ext3                        \
+#                      $defaultignore{ }                       \
+#                      method{ lvm } device{ /dev/sda }        \
+#                      vg_name{ sys_vg }                       \
+#              .                                               \
+#              10000 10000 20% ext3                            \
+#                      $lvmok{ } in_vg{ sys_vg }               \
+#                      lv_name{ slash } method{ format }       \
+#                      format{ } use_filesystem{ }             \
+#                      filesystem{ ext3 } mountpoint{ / }      \
+#              .                                               \
+#              10000 10000 74% ext3                            \
+#                      $lvmok{ } in_vg{ sys_vg }               \
+#                      lv_name{ home } method{ format }        \
+#                      format{ } use_filesystem{ }             \
+#                      filesystem{ ext3 } mountpoint{ /home }  \
+#              .                                               \
+#              4000 4000 %5 linux-swap                         \
+#                      $lvmok{ } in_vg{ sys_vg }               \
+#                      lv_name{ swap }                         \
+#                      method{ swap } format{ }                \
+#              .                                               \
+
+# The full recipe format is documented in the file partman-auto-recipe.txt
+# included in the 'debian-installer' package or available from D-I source
+# repository. This also documents how to specify settings such as file
+# system labels, volume group names and which physical devices to include
+# in a volume group.
+
+# This makes partman automatically partition without confirmation, provided
+# that you told it what to do using one of the methods above.
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+# When disk encryption is enabled, skip wiping the partitions beforehand.
+#d-i partman-auto-crypto/erase_disks boolean false
+
+
+# This makes partman automatically partition without confirmation.
+d-i partman-md/confirm boolean true
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+
+### Package selection
+tasksel tasksel/first multiselect standard
+
+# Individual additional packages to install
+#d-i pkgsel/include string xfce4
+#d-i pkgsel/include string openssh-server build-essential
+# Whether to upgrade packages after debootstrap.
+# Allowed values: none, safe-upgrade, full-upgrade
+d-i pkgsel/upgrade select none
+
+# Some versions of the installer can report back on what software you have
+# installed, and what software you use. The default is not to report back,
+# but sending reports helps the project determine what software is most
+# popular and include it on CDs.
+popularity-contest popularity-contest/participate boolean false
+
+### Boot loader installation
+# This is fairly safe to set, it makes grub install automatically to the MBR
+# if no other operating system is detected on the machine.
+d-i grub-installer/only_debian boolean true
+
+
+
+# Due notably to potential USB sticks, the location of the MBR can not be
+# determined safely in general, so this needs to be specified:
+d-i grub-installer/bootdev  string /dev/sda
+# To install to the first device (assuming it is not a USB stick):
+d-i grub-installer/bootdev  string default
+
+### Finishing up the installation
+# During installations from serial console, the regular virtual consoles
+# (VT1-VT6) are normally disabled in /etc/inittab. Uncomment the next
+# line to prevent this.
+#d-i finish-install/keep-consoles boolean true
+
+# Avoid that last message about the install being complete.
+d-i finish-install/reboot_in_progress note
+
+# This will prevent the installer from ejecting the CD during the reboot,
+# which is useful in some situations.
+d-i cdrom-detect/eject boolean false
+
+# This is how to make the installer shutdown when finished, but not
+# reboot into the installed system.
+#d-i debian-installer/exit/halt boolean true
+# This will power off the machine instead of just halting it.
+d-i debian-installer/exit/poweroff boolean true
+
+
+
+
+
+
+
+
+#Example Preseed: You can copy an add between line.
+#-----------------------------------------------------------------------------
+d-i debian-installer/locale string en_US
+d-i keyboard-configuration/xkb-keymap select us
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string unassigned-hostname
+d-i netcfg/get_domain string unassigned-domain
+d-i netcfg/wireless_wep string
+d-i mirror/country string manual
+d-i mirror/http/hostname string ftp.tr.debian.org
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+d-i passwd/root-login boolean false
+d-i passwd/user-fullname string test
+d-i passwd/username string test
+d-i passwd/user-password string 1
+d-i passwd/user-password-again string 1
+d-i passwd/user-default-groups string audio cdrom video
+d-i clock-setup/utc boolean true
+d-i time/zone string US/Eastern
+d-i partman-auto/method string regular
+d-i partman-auto-lvm/guided_size string max
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-auto/choose_recipe select atomic
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+d-i partman-md/confirm boolean true
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+tasksel tasksel/first multiselect standard
+d-i pkgsel/upgrade select none
+popularity-contest popularity-contest/participate boolean false
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/bootdev  string /dev/sda
+d-i grub-installer/bootdev  string default
+d-i finish-install/reboot_in_progress note
+d-i cdrom-detect/eject boolean false
+d-i debian-installer/exit/poweroff boolean true
+#-------------------------------------------------------------------------------
+
+
+
+-------------Preseed File Test-------------------
+Just start DHCP,TFTP server machine and what you want boot machine.If it is working, congratulations you did it!!!
+
+###################STEPS BEFORE PREPARE PRESEED FILE FOR CLONEZILLA########################3
+We are using TFTP,DHCP,NFS server. We made TFTP,DHCP server and set conf file.Now, we need NFS server and set configure.
+
+-----------------Making NFS server------------------
+We need NFS server for read or save image file.First of all , make new machine and Ubuntu 18.04 server for NFS server on 
+Virtualbox. We need to install nfs packet. 
+
+sudo apt install nfs-kernel-server
+
+Then we should make mount file,change own,change permission:
+
+sudo mkdir -p /home/partimag
+
+sudo chown nobody:nogroup /home/partimag
+
+sudo chmod 777 /home/partimag
+
+and we configure NFS server for mount file. Open /etc/exports using what you want text editor, I am using nano editor.
+
+sudo nano /etc/exports
+
+and add following this code:
+
+/home/partimag *(rw,sync,no_subtree_check)
+
+and save file.
+
+rw: read and write operations   sync: write any change to the disc before applying it    no_subtree_check: prevent subtree checking
+then we exports file with following code:
+
+sudo exportfs -a
+
+Finally, we should restart NFS server.
+
+sudo systemctl restart nfs-kernel-server
+
+NFS server configuration is done.
+
+--------------Setting TFTP Server For Clonezilla Image--------------------
+Follow steps:
+
+Download Clonezilla.iso:
+
+sudo wget https://osdn.net/projects/clonezilla/downloads/68292/clonezilla-live-2.5.2-31-amd64.iso -O clonezilla.iso
+
+Mount it to /mnt
+
+sudo mount -o loop clonezilla.iso /mnt
+
+Create directory for clonezilla things to TFTP default directory:
+
+sudo mkdir /var/lib/tftpboot/clonezilla
+
+Copy some files to made directories:
+
+sudo cp /mnt/live/{vmlinuz,initrd.img,filesystem.squashfs} /var/lib/tftpboot/clonezilla
+
+setting is done.
+
+--------------Preparing Clonezilla Preseed File--------------------------
+Preparing clonezille preseed file is too easy. All preseed code writing to pxelinux.cfg conf file, and small chracter 
+representation to process.Open pxelinux.cfg what you want to use text editor, I am using nano.
+
+sudo nano /var/lib/tftpboot/pxelinux.cfg/default
+
+add following Example code:
+
+#------------------------------------------------------
+label clone
+  menu label Clone Disk
+  kernel clonezilla/vmlinuz
+  append initrd=clonezilla/initrd.img boot=live username=test union=overlay components noswap noprompt vga=788 keyboard-layouts=en locales=en_GB.UTF-8 fetch=tftp://10.0.2.102/clonezilla/filesystem.squashfs  ocs_repository="nfs://test@10.0.2.103/home/partimag" ocs_live_run="ocs-sr --batch -g auto -e1 auto -e2 -r -j2 -k -i 4096 -fsck -senc -p poweroff savedisk imagename sda"
+#------------------------------------------------------
+
+Explaining code:
+fetch=tftp://10.0.2.102/clonezilla/filesystem.squashfs : writing for get clonezilla filesystem
+ocs_repository="nfs://test@10.0.2.103/home/partimag" : save or read your image 
+ocs_live_run="ocs-sr --batch -g auto -e1 auto -e2 -r -j2 -k -i 4096 -fsck -senc -p poweroff savedisk imagename sda" : this is 
+your preseed, you configure this option inside. ocs-sr options:
+
+To save or restore image
+
+  ocs-sr [OPTION] {MODE} IMAGE_NAME DEVICE
+
+Where MODE is one of
+    savedisk
+    saveparts
+    restoredisk
+    restoreparts
+
+Options for saving:
+
+  -noabo, --not-only-access-by-owner
+      Make the image of partition can be accessed by others, not only by owner.
+      By default the image of partition will be changed as 600. With this
+      option, it will be 644.
+
+  -senc, --skip-enc-ocs-img
+      Skip encrypting the image with passphrase.
+
+  -enc, --enc-ocs-img
+      To encrypt the image with passphrase.
+
+  -sfsck, --skip-fsck-src-part
+      Skip running fsck on the source file system before saving it.
+
+  -fsck, -fsck-src-part, --fsck-src-part
+      Run fsck interactively on the source file system before saving it.
+
+  -fsck-y, -fsck-src-part-y, --fsck-src-part-y
+      Run fsck automatically on the source file system before saving it. This
+      option will always attempt to fix any detected filesystem corruption
+      automatically. //NOTE// Use this option in caution.
+
+  -gm, --gen-md5sum
+      Generate the MD5 checksum for the image. Later you can use -cm or
+      --check-md5sum option to check the image when restoring the image.
+      Note! It might take a lot of time to generate if the image size is
+      large.
+
+  -gs, --gen-sha1sum
+      Generate the SHA1 checksum for the image. Later you can use -cs or
+      --check-sha1sum option to check the image when restoring the image.
+      Note! It might take a lot of time to generate if the image size is
+      large.
+
+  -gmf, --gen-chksum-for-files-in-dev
+      Generate the checksum for files in the source device. Later you can use
+      -cmf or --chk-chksum-for-files-in-dev to check the files in the
+      destination device after they are restored. Note! It might take a lot of
+      time to inspect the checksum if there are many files in the destination
+      device.
+
+  -i, --image-size SIZE
+      Set the split image file volume size SIZE (MB). When ocs-sr is run with
+      -x, the default SIZE is set as 4096, if without -x, we will not split
+      it.  For storing on FAT32 filesystems, the SIZE should not be larger
+      than 4096.
+
+  -j2, --clone-hidden-data
+      Use dd to clone the image of the data between MBR (1st sector, i.e. 512
+      bytes) and 1st partition, which might be useful for some recovery tool.
+
+  -ntfs-ok, --ntfs-ok
+      Assume the NTFS integrity is OK, do NOT check again (for ntfsclone only)
+
+  -rm-win-swap-hib, --rm-win-swap-hib
+      Try to remove the MS windows swap file in the source partition.
+
+  -q, --use-ntfsclone
+      If the partition to be saved is NTFS, use program ntfsclone instead of
+      partimage (i.e. Priority: ntfsclone > partimage > dd)
+
+  -q1, --force-to-use-dd
+      Force to use dd to save partition(s) (inefficient method, very slow, but
+      works for all the file system).
+
+  -q2, --use-partclone
+      Use partclone to save partition(s) (i.e. partclone > partimage > dd).
+
+  -rescue, --rescue
+      Turn on rescue mode, i.e. try to skip bad sectors.
+
+  -sc, -scs, --skip-check-restorable, --skip-check-restorable-s
+      By default Clonezilla will check the image if restorable after it is
+      created. This option allows you to skip that.
+
+  -z0, --no-compress
+      Don't compress when saving: fast but very big image file
+  -z1, --gzip-compress
+      Compress using gzip when saving (default)
+  -z1p, --smp-gzip-compress
+      Compress using parallel gzip program (pigz) for multi-cpu machines
+  -z2, --bz2-compress
+      Compress using bzip2 when saving: slow but smallest image file
+  -z2p, --smp-bzip2-compress
+      Compress using parallel bzip2 program (pbzip2) for multi-cpu machines
+  -z3, --lzo-compress
+      Compress using lzop when saving: similar to gzip but faster
+  -z4, --lzma-compress
+      Compress using lzma when saving: similar to bzip but faster
+  -z5, --xz-compress
+      Compress using xz when saving: faster decompression than bzip2.
+  -z5p, --smp-xz-compress
+      Compress using parallel xz when saving
+  -z6, --lzip-compress
+      Compress using lzip when saving: faster decompression than bzip2.
+  -z6p, --smp-lzip-compress
+      Compress using parallel lzip when saving
+  -z7, --lrzip-compress
+      Compress using lrzip when saving.
+
+
+Some words are reserved for IMAGE_NAME, "ask_user" is used to let user to
+input a name when saving an image. "autoname" is used to automatically
+generate the image name based on network card MAC address and time.
+"autohostname" is used to automatically generate the image name based on
+hostname. "autoproductname" is used to automatically generate the image name
+based on hardware product model gotten from dmidecode.
+
+A word is reserved for DEVICE, "ask_user" could be used to let user to select
+the source device when saving an image.
+
+
+Options for restoring:
+
+  -f, --from-part-in-img PARTITION
+      Restore the partition from image. This is especially for "restoreparts"
+      to restore the image of partition (only works for one) to different
+      partition, e.g. sda1 of image to sdb6.
+
+ -g, --grub-install GRUB_PARTITION
+      Install grub in the MBR of the disk containing partition GRUB_PARTITION
+      with root grub directory in the same GRUB_PARTITION when restoration
+      finishes, GRUB_PARTITION can be one of "/dev/sda1", "/dev/sda2"... or
+      "auto" ("auto" will let clonezilla detect the grub root partition
+      automatically). If "auto" is assigned, it will work if grub partition
+      and root partition are not in the same partition.
+
+  -r, --resize-partition
+      Resize the partition when restoration finishes, this will resize the
+      file system size to fit the partition size. It is normally used when
+      when a small partition image is restored to a larger partition.
+
+  -k, --no-fdisk, --no-create-partition
+      Do NOT create partition in target harddisk. If this option is set, you
+      must make sure there is an existing partition table in the current
+      restored harddisk. Default is to create the partition table.
+
+  -icrc, --icrc
+      Skip Partclone CRC checking.
+
+  -irhr, --irhr
+      Skip removing the Linux udev hardware records on the restored GNU/Linux.
+
+  -irvd, --irvd
+      Skip removing the NTFS volume dirty flag after file system is restored.
+
+  -ius, --ius
+      Skip updating syslinux-related files on the restored GNU/Linux.
+
+  -icds, --ignore-chk-dsk-size-pt
+      Skip checking destination disk size before creating the partition table
+      on it. By default it will be checked and if the size is smaller than the
+      source disk, quit.
+
+  -iefi, --ignore-update-efi-nvram
+      Skip updating boot entries in EFI NVRAM after restoring.
+
+  -k1
+      Create partition table in the target disk proportionally.
+
+  -k2
+      Enter command line prompt to create partition table manually before
+      restoring image.
+
+  -t, --no-restore-mbr
+      Do NOT restore the MBR (Mater Boot Record) when restoring image. If this
+      option is set, you must make sure there is an existing MBR in the
+      current restored harddisk.   Default is Yes.  See -g above
+
+  -u, --select-img-in-client
+      Input the image name in clients
+
+  -e, --load-geometry
+      Force to use the saved CHS (cylinders, heads, sectors) when using sfdisk
+
+  -e1, --change-geometry NTFS-BOOT-PARTITION
+     Force to change the CHS (cylinders, heads, sectors) value of NTFS boot
+     partition after image is restored. NTFS-BOOT-PARTITION can be one of
+     "/dev/sda1", "/dev/sda2"... or "auto" ("auto" will let clonezilla detect
+     the NTFS boot partition automatically)
+
+  -e2, --load-geometry-from-edd
+     Force to use the CHS (cylinders, heads, sectors) from EDD (Enhanced Disk
+     Device) when creating partition table by sfdisk
+
+  -y, -y0, --always-restore, --always-restore-default-local
+     Let Clonezilla server as restore server, i.e. client will always has
+     restore mode to choose (However default mode in PXE menu is local boot)
+
+  -y1, --always-restore-default-clone
+     Let Clonezilla server as restore server, i.e. client will always has
+     restore mode to choose (The default mode in PXE menu is clone, so if
+     client boots, it will enter clone always, i.e. clone forever)
+
+  -j, --create-part-by-sfdisk
+     Use sfdisk to create partition table instead of using dd to dump the
+     partition table from saved image (This is default)
+
+  -j0, --create-part-by-dd
+     Use dd to dump the partition table from saved image instead of sfdisk.
+     ///Note/// This does NOT work when logical drives exist.
+
+  -j1, --dump-mbr-in-the-end
+     Use dd to dump the MBR (total 512 bytes, i.e. 446 bytes (executable code
+     area) + 64 bytes (table of primary partitions) + 2 bytes (MBR signature;
+     # 0xAA55) = 512 bytes) after disk image was restored. This is an
+     insurance for some hard drive has different numbers of cylinder, head and
+     sector between image was saved and restored.
+
+  -j2, --clone-hidden-data
+     Use dd to clone the image of the data between MBR (1st sector, i.e. 512
+     bytes) and 1st partition, which might be useful for some recovery tool.
+
+  -hn0 PREFIX
+     Change the hostname of M$ Windows based on the combination of hostname
+     prefix and IP address, i.e. PREFIX-IP
+
+  -hn1 PREFIX
+     Change the hostname of M$ Windows based on the combination of hostname
+     prefix and NIC MAC address, i.e. PREFIX-MAC
+
+  --max-time-to-wait TIME
+     When not enough clients have connected (but at least one), start anyways
+     when TIME seconds since first client connection have pased. This option
+     is used with --clients-to-wait
+
+  -scr, --skip-check-restorable-r
+      By default Clonezilla will check the image if restorable before
+      restoring. This option allows you to skip that.
+
+  -cm, --check-md5sum
+     Check the MD5 checksum for the image. To use this option, you must enable
+     -gm|--gen-md5sum option when the image is saved. Note! It might take
+     a lot of time to check if the image size is large.
+
+  -cs, --check-sha1sum
+     Check the SHA1 checksum for the image. To use this option, you must
+     enable -gs or --gen-sha1sum option when the image is saved. Note! It
+     might take a lot of time to check if the image size is large.
+
+  -cmf, --chk-chksum-for-files-in-dev
+     Check the checksum for the files in the device. To use this option, you
+     must enable -gmf or --gen-chksum-for-files-in-dev when the image is saved.
+     Note! (1) The file system must be supported by Linux kernel so that it
+     can be mounted as read-only to check the files. (2) It might take a lot
+     of time to check if there are many files in the source device.
+
+  -srel, --save-restore-error-log
+     Save the error log file in the image dir. By default the log file won't
+     be saved when error occurs.
+
+  --mcast-port NO
+     Assign the udp port number for multicast restore. This is used by
+     clonezilla server. Normally it's not necessary to manually assign this
+     option.
+
+Some words are reserved for IMAGE_NAME, "ask_user" is used to let user to
+input a name when saving an image. "autoproductname" is used to automatically
+get the image name based on hardware product model from dmidecode.
+
+A word is reserved for DEVICE, "ask_user" could be used to let user to select
+the source device when saving an image.
+
+
+
+General options:
+
+  -l, --language
+      INDEX Set the language to be shown by index number:
+        [0|en_US.UTF-8]: English,
+        [2|zh_TW.UTF-8]: Traditional Chinese (UTF-8, Unicode) - Taiwan
+        [a|ask]: Prompt to ask the language index
+
+  -b, -batch, --batch
+      (DANGEROUS!) Run program in batch mode, i.e. without any prompt or wait
+      for pressing enter key.  //NOTE// You have to use '-batch' instead of
+      '-b' when you want to use it in the boot parameters.  Otherwise the
+      program init on system will honor '-b', too.
+
+  -c, --confirm
+      Wait for confirmation before saving or restoring
+
+  -d, --debug-mode
+      Enter command mode to debug before saving/restoring
+
+  --debug=LEVEL
+      Output the partimage debug log in directory /var/log/ with debug LEVEL
+      (0,1,2... default=0)
+
+  -m, --module MODULE
+      Force to load kernel module MODULE, this is useful when some SCSI device
+      is not detected. NOTE! Use only one module, more than one may cause
+      parsing problem.
+
+  -o0, --run-prerun-dir
+      Run the script in the directory /usr/share/drbl/postrun/ocs/ before
+      clone is started. The command will be run before MBR is created or
+      saved.
+
+  -o1, -o, --run-postrun-dir
+      Run the script in the directory /usr/share/drbl/postrun/ocs/ when clone
+      is finished. The command will be run before that assigned in -p or
+      --postaction.
+
+  -w, --wait-time TIME
+      Wait for TIME secs before saving/restoring
+
+  -nogui, --nogui
+      Do not show GUI (TUI) of Partclone or Partimage, use text only
+
+  -a, --no-force-dma-on
+      Do not force to turn on HD DMA
+
+  -mp, --mount-point MOUNT_POINT
+      Use NFS to mount MOUNT_POINT as directory ocsroot (ocsroot is assigned
+      in drbl.conf)
+
+  -or, --ocsroot DIR
+      Specify DIR (absolute path) as directory ocsroot (i.e. overwrite the
+      ocsroot assigned in drbl.conf)
+
+  -p, --postaction [choose|poweroff|reboot|command|CMD]
+      When save/restoration finishes, choose action in the client, poweroff,
+      reboot (default), in command prompt or run CMD
+
+  -ns, --ntfs-progress-in-image-dir
+      Save the ntfsclone progress tmp file in the image dir so that if cloning
+      is in DRBL client, the progress can be check in the server (Default in
+      to be put in local /tmp/, which is local tmpfs).
+
+  -um, --user-mode [beginner|expert]
+      Specify the mode to use. If not specified, default mode is for a beginner.
+
+  -v, --verbose
+      Prints verbose information
+
+  -d0, --dialog      Use dialog
+  -d1, --Xdialog     Use Xdialog
+  -d2, --whiptail    Use whiptail
+  -d3, --gdialog     Use gdialog
+  -d4, --kdialog     Use kdialog
+
+  -x, --interactive
+Interactive mode to save or restore.
+
+Now, you can do your own preseed !!!
+
+
+-REFERENCES
+
+https://gist.github.com/gotbletu/630478ddf5b4e6ad6abd1a8b23918830
+https://www.theurbanpenguin.com/pxe-deploy-clonezilla/
+https://www.debian.org/releases/buster/example-preseed.txt
+https://vitux.com/install-nfs-server-and-client-on-ubuntu/
